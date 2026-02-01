@@ -1130,16 +1130,15 @@
                     <div id="reviewSummary"></div>
 
                     <div id="exportButtons">
-                        <button type="button" class="btn btn-success" onclick="submitToEmail()">📧 Submit to Harbor Law</button>
-                        <button type="button" class="btn btn-primary" onclick="exportJSON()">📥 Download JSON File</button>
-                        <button type="button" class="btn btn-secondary" onclick="copyToClipboard()">📋 Copy JSON to Clipboard</button>
+                        <button type="button" class="btn btn-success" onclick="submitToHarborLaw()">📧 Submit to Harbor Law</button>
+                        <button type="button" class="btn btn-primary" onclick="exportJSON()">📥 Download JSON Backup</button>
                     </div>
 
                     <div class="alert alert-info" style="margin-top: 20px;">
-                        <strong>Submission Options:</strong><br>
-                        • <strong>Submit to Harbor Law:</strong> Send your completed intake form directly to our office<br>
-                        • <strong>Download JSON:</strong> Save a backup copy to your device<br>
-                        • <strong>Copy to Clipboard:</strong> Copy the data for your records
+                        <strong>Next Steps:</strong><br>
+                        • Click <strong>"Submit to Harbor Law"</strong> to securely send your completed intake form to our office<br>
+                        • Optionally <strong>download a backup copy</strong> for your records<br>
+                        • You will receive a confirmation after submission
                     </div>
 
                     <div class="navigation">
@@ -1183,6 +1182,14 @@
 
         // Initialize form
         document.addEventListener('DOMContentLoaded', function() {
+            // Check if user just submitted
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('submitted') === 'true') {
+                showModal('✅ Thank you! Your estate planning intake form has been successfully submitted to Harbor Law. We will review your information and contact you soon.');
+                // Clean URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+
             createSectionNav();
             updateProgress();
             addChild(); // Add one child by default
@@ -1940,7 +1947,7 @@
         }
 
         // Export functions
-        function submitToEmail() {
+        function submitToHarborLaw() {
             const form = document.getElementById('intakeForm');
             const formDataObj = new FormData(form);
             const data = {
@@ -1967,94 +1974,47 @@
 
             // Get client name for subject line
             const clientName = `${data.formData.firstName || ''} ${data.formData.lastName || ''}`.trim() || 'New Client';
+            const clientEmail = data.formData.email || 'no-email-provided';
 
-            // Create email body
-            const emailBody = encodeURIComponent(
-                `New Estate Planning Intake Form Submission\n\n` +
-                `Client: ${clientName}\n` +
-                `Submitted: ${new Date().toLocaleString()}\n\n` +
-                `Please find the complete intake form data below:\n\n` +
-                `${JSON.stringify(data, null, 2)}`
-            );
+            // Show loading state
+            const submitBtn = event.target;
+            const originalText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '⏳ Submitting...';
 
-            const emailSubject = encodeURIComponent(`Estate Planning Intake - ${clientName}`);
-            
-            // Create mailto link
-            const mailtoLink = `mailto:matt@harbor.law?subject=${emailSubject}&body=${emailBody}`;
-            
-            // Check if body is too long for mailto (some email clients have limits)
-            if (emailBody.length > 2000) {
-                // If too long, use a service or show alternative
-                showSubmitModal(data, clientName);
-            } else {
-                // Open email client
-                window.location.href = mailtoLink;
-                showModal('Opening your email client to send the intake form to Harbor Law...');
-            }
-        }
+            // Create FormSubmit form
+            const formSubmitForm = document.createElement('form');
+            formSubmitForm.action = 'https://formsubmit.co/matt@harbor.law';
+            formSubmitForm.method = 'POST';
+            formSubmitForm.style.display = 'none';
 
-        function showSubmitModal(data, clientName) {
-            // Create a more sophisticated submission modal
-            const modal = document.getElementById('successModal');
-            const messageEl = document.getElementById('modalMessage');
-            
-            messageEl.innerHTML = `
-                <p style="margin-bottom: 15px;"><strong>Your intake form is ready to submit!</strong></p>
-                <p style="margin-bottom: 15px;">The form data is too large for a simple email. Please choose one of these options:</p>
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 15px 0;">
-                    <p style="margin-bottom: 10px;"><strong>Option 1: Copy & Email</strong></p>
-                    <button onclick="copyAndEmailManually('${clientName}')" class="btn btn-primary" style="margin-bottom: 10px;">
-                        Copy Data & Open Email
-                    </button>
-                    <p style="font-size: 12px; color: #666;">This will copy your form data and open your email client. Paste the data into the email body.</p>
-                </div>
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 15px 0;">
-                    <p style="margin-bottom: 10px;"><strong>Option 2: Download & Attach</strong></p>
-                    <button onclick="downloadAndEmail('${clientName}')" class="btn btn-success" style="margin-bottom: 10px;">
-                        Download JSON & Open Email
-                    </button>
-                    <p style="font-size: 12px; color: #666;">This will download the JSON file. Attach it to the email that opens.</p>
-                </div>
-            `;
-            
-            modal.classList.add('active');
-        }
+            // Add FormSubmit configuration fields
+            const fields = {
+                '_subject': `Estate Planning Intake - ${clientName}`,
+                '_cc': clientEmail,
+                '_template': 'box',
+                '_captcha': 'false',
+                '_next': window.location.href + '?submitted=true',
+                'client_name': clientName,
+                'client_email': clientEmail,
+                'submission_date': new Date().toLocaleString(),
+                'form_data': JSON.stringify(data, null, 2)
+            };
 
-        function copyAndEmailManually(clientName) {
-            const form = document.getElementById('intakeForm');
-            const formDataObj = new FormData(form);
-            const data = {};
-            
-            for (let [key, value] of formDataObj.entries()) {
-                data[key] = value;
-            }
-
-            const checkboxes = form.querySelectorAll('input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                data[cb.name] = cb.checked;
+            // Add all fields to form
+            Object.keys(fields).forEach(key => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = fields[key];
+                formSubmitForm.appendChild(input);
             });
 
-            const json = JSON.stringify(data, null, 2);
-            
-            navigator.clipboard.writeText(json).then(() => {
-                const emailSubject = encodeURIComponent(`Estate Planning Intake - ${clientName}`);
-                const emailBody = encodeURIComponent(`Please see attached intake form data (copied to clipboard - paste below):\n\n`);
-                window.location.href = `mailto:matt@harbor.law?subject=${emailSubject}&body=${emailBody}`;
-                closeModal();
-                showModal('Form data copied! Opening email - please paste the data into the email body.');
-            });
-        }
+            // Add form to page and submit
+            document.body.appendChild(formSubmitForm);
+            formSubmitForm.submit();
 
-        function downloadAndEmail(clientName) {
-            exportJSON();
-            const emailSubject = encodeURIComponent(`Estate Planning Intake - ${clientName}`);
-            const emailBody = encodeURIComponent(`Please find attached my completed estate planning intake form.\n\nClient: ${clientName}\nSubmitted: ${new Date().toLocaleString()}`);
-            
-            setTimeout(() => {
-                window.location.href = `mailto:matt@harbor.law?subject=${emailSubject}&body=${emailBody}`;
-                closeModal();
-                showModal('JSON file downloaded! Opening email - please attach the downloaded file.');
-            }, 500);
+            // Note: The page will redirect, so we don't need to reset the button
         }
 
         function exportJSON() {
@@ -2099,33 +2059,6 @@
             URL.revokeObjectURL(url);
 
             showModal('JSON file downloaded successfully!');
-        }
-
-        function copyToClipboard() {
-            const form = document.getElementById('intakeForm');
-            const formDataObj = new FormData(form);
-            const data = {};
-            
-            for (let [key, value] of formDataObj.entries()) {
-                data[key] = value;
-            }
-
-            const checkboxes = form.querySelectorAll('input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                data[cb.name] = cb.checked;
-            });
-
-            const json = JSON.stringify(data, null, 2);
-            
-            navigator.clipboard.writeText(json).then(() => {
-                showModal('JSON data copied to clipboard!');
-            }).catch(err => {
-                showModal('Failed to copy to clipboard. Please try the download option.');
-            });
-        }
-
-        function printForm() {
-            window.print();
         }
 
         // Local storage functions
